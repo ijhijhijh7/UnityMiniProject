@@ -19,7 +19,7 @@ public class Collision : MonoBehaviour
     [SerializeField] public bool onWall;
     [SerializeField] public bool onRightWall;
     [SerializeField] public bool onLeftWall;
-    [SerializeField] int wallSide;
+    [SerializeField] public int wallSide;
 
     private void Start()
     {

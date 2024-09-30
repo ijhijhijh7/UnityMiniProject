@@ -13,7 +13,7 @@ public class PlayerController : MonoBehaviour
 
     [SerializeField] Collision coll;
 
-    [SerializeField] float slidespeed = 1f;
+    [SerializeField] float slidespeed = 1.5f;
 
     private bool canMove = true;
     private bool wallGrab;
@@ -34,21 +34,18 @@ public class PlayerController : MonoBehaviour
 
         Walk(dir);
 
-        wallGrab = coll.onWall && Input.GetKey(KeyCode.Z);
-
-        if (x != 0 && !coll.onGround && coll.onWall)
+        if (coll.onWall)
         {
-            WallSlide();
-        }
-
-
-        if (Input.GetKey(KeyCode.Z))
-        {
-            if (coll.onWall && !coll.onGround)
+            if (Input.GetKey(KeyCode.Z))
             {
-                WallJump();
+                rb.velocity = new Vector2(rb.velocity.x, 0);
+            }
+            else if (!coll.onGround)
+            {
+                WallSlide();
             }
         }
+
 
         if (Input.GetKeyDown(KeyCode.X))
         {
@@ -57,13 +54,19 @@ public class PlayerController : MonoBehaviour
 
         if (Input.GetKey(KeyCode.C))
         {
-            Jump();
+            if (coll.onGround)
+                Jump(Vector2.up, false);
+            if (coll.onWall && !coll.onGround)
+            {
+                WallJump();
+            }
         }
 
-        if (Input.GetKeyDown(KeyCode.C) && wallGrab)
-    {
-        WallJump();
-    }
+        if (wallJumped && (coll.onGround || coll.onWall))
+        {
+            wallJumped = false; // 상태 초기화
+            rb.velocity = new Vector2(rb.velocity.x, 0); // 수직 속도 초기화
+        }
     }
 
     private void Walk(Vector2 dir)
@@ -84,22 +87,30 @@ public class PlayerController : MonoBehaviour
 
     private void WallSlide()
     {
-        rb.velocity = new Vector2(rb.velocity.x, -slidespeed);
+        rb.velocity = new Vector2(rb.velocity.x, rb.velocity.y * slidespeed);
     }
 
-    private void Jump()
+    private void Jump(Vector2 dir, bool wall)
     {
         rb.velocity = new Vector2(rb.velocity.x, 0);
         rb.velocity += Vector2.up * jumpForce;
     }
 
+
     private void WallJump()
     {
+        if ((coll.wallSide== 1 && coll.onRightWall) || coll.wallSide == -1 && !coll.onRightWall)
+        {
+            coll.wallSide *= -1;
+        }
+
         StopCoroutine(DisableMovement(0));
-        StartCoroutine(DisableMovement(0.1f));
+        StartCoroutine(DisableMovement(.1f));
 
         Vector2 wallDir = coll.onRightWall ? Vector2.left : Vector2.right;
-        rb.velocity = new Vector2(wallDir.x * jumpForce, jumpForce);
+
+        Jump((Vector2.up / 1.5f + wallDir / 1.5f), true);
+
         wallJumped = true;
     }
 
@@ -129,7 +140,7 @@ public class PlayerController : MonoBehaviour
         // 대시 속도 적용
         rb.velocity = dashDirection * dashSpeed;
 
-        // 대시 지속 시간 (예: 0.2초)
+        // 대시 지속 시간
         yield return new WaitForSeconds(0.2f);
 
         canMove = true; // 대시 후 이동 가능 설정

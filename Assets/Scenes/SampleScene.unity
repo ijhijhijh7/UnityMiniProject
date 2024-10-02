@@ -238,8 +238,11 @@ MonoBehaviour:
   maxFallSpeed: 10
   moveAccel: 30
   jumpSpeed: 15
-  dashSpeed: 20
+  dashSpeed: 25
   dashTime: 0.2
+  isDashing: 0
+  canDash: 1
+  playerAnimator: {fileID: 167242472}
 --- !u!50 &167242476
 Rigidbody2D:
   serializedVersion: 4

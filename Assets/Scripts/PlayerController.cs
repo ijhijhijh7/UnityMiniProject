@@ -14,6 +14,8 @@ public class PlayerController : MonoBehaviour
 
     [SerializeField] Collision coll;
 
+    private SpriteRenderer spriteRenderer;
+
 
     [Header("PlayerInfo")]
     [SerializeField] float maxSpeed = 10f;
@@ -28,9 +30,20 @@ public class PlayerController : MonoBehaviour
     [SerializeField] bool isDashing = false;             // 대시 중인지 여부
     [SerializeField] bool canDash = true;
 
+    [SerializeField] Animator playerAnimator;
+    private int curAniHash;
+
+    private static int idleHash = Animator.StringToHash("Idle");
+    private static int walkHash = Animator.StringToHash("Walk");
+    private static int jumpHash = Animator.StringToHash("Jump");
+    private static int fallHash = Animator.StringToHash("Fall");
+    private static int grabHash = Animator.StringToHash("Grab");
+
+
     private void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
+        spriteRenderer = GetComponent<SpriteRenderer>();
     }
 
     private void Update()
@@ -56,6 +69,11 @@ public class PlayerController : MonoBehaviour
                 DashUpdate();
                 break;
         }
+    }
+
+    private void FixedUpdate()
+    {
+        AnimatorPlay();
     }
 
     private void IdleUpdate()
@@ -185,6 +203,15 @@ public class PlayerController : MonoBehaviour
     {
         float xInput = Input.GetAxisRaw("Horizontal");
 
+        if (xInput < 0)
+        {
+            spriteRenderer.flipX = true; // 왼쪽 방향으로 이동 시 스프라이트를 뒤집음
+        }
+        else if (xInput > 0)
+        {
+            spriteRenderer.flipX = false; // 오른쪽 방향으로 이동 시 스프라이트를 정상으로
+        }
+
         //float xSpeed = Mathf.Lerp(rb.velocity.x, xInput * maxSpeed, moveAccel);
         float xSpeed = Mathf.MoveTowards(rb.velocity.x, xInput * maxSpeed, Time.deltaTime * moveAccel);
         float ySpeed = Mathf.Max(rb.velocity.y, -maxFallSpeed);
@@ -263,5 +290,36 @@ public class PlayerController : MonoBehaviour
 
         // 플레이어의 현재 상태를 Idle로 전환하여 움직임 상태 초기화
         curState = PlayerState.Idle;
+    }
+
+    private void AnimatorPlay()
+    {
+        int temp = idleHash;
+        if (curState == PlayerState.Idle)
+        {
+            temp = idleHash;
+        }
+        if (curState == PlayerState.Walk)
+        {
+            temp = walkHash;
+        }
+        if (curState == PlayerState.Jump)
+        {
+            temp = jumpHash;
+        }
+        if (curState == PlayerState.Fall)
+        {
+            temp = fallHash;
+        }
+        if (curState == PlayerState.Grab)
+        {
+            temp = grabHash;
+        }
+
+        if (curAniHash != temp)
+        {
+            curAniHash = temp;
+            playerAnimator.Play(curAniHash);
+        }
     }
 }

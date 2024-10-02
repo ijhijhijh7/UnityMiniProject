@@ -1,26 +1,32 @@
 using System.Collections;
 using System.Collections.Generic;
-using Unity.VisualScripting;
+using Unity.Mathematics;
 using UnityEngine;
-using UnityEngine.Rendering;
+using UnityEngine.Scripting.APIUpdating;
+using UnityEngine.UI;
 
 public class PlayerController : MonoBehaviour
 {
-    private Rigidbody2D rb;
-    [SerializeField] float speed = 10f;
+    enum PlayerState { Idle, Walk, Jump, Fall, Grab, Dash};
+    [SerializeField] PlayerState curState;
 
-    [SerializeField] float jumpForce = 15f;
+    private Rigidbody2D rb;
 
     [SerializeField] Collision coll;
 
-    [SerializeField] float slideSpeed = 1.5f;
 
-    private bool canMove = true;
-    private bool wallGrab;
-    private bool wallJumped;
+    [Header("PlayerInfo")]
+    [SerializeField] float maxSpeed = 10f;
+    [SerializeField] float maxFallSpeed = 10f;
+    [SerializeField] float moveAccel = 30f;
+    [SerializeField] float jumpSpeed = 15f;
 
-    public int side = 1;
-
+    [Header("DashInfo")]
+    [SerializeField] float dashSpeed = 25f;     // 대시 속도
+    [SerializeField] float dashTime = 0.2f;     // 대시 지속 시간
+    private float dashTimeLeft;                 // 대시 남은 시간
+    [SerializeField] bool isDashing = false;             // 대시 중인지 여부
+    [SerializeField] bool canDash = true;
 
     private void Awake()
     {
@@ -29,144 +35,233 @@ public class PlayerController : MonoBehaviour
 
     private void Update()
     {
-        if (!canMove)
+        switch (curState)
         {
-            rb.velocity = Vector2.zero; // 현재 속도를 0으로 설정
-            return;
-        }
-
-        float x = Input.GetAxis("Horizontal");
-        float y = Input.GetAxis("Vertical");
-        float xRaw = Input.GetAxisRaw("Horizontal");
-        float yRaw = Input.GetAxisRaw("Vertical");
-        Vector2 dir = new Vector2(x, y);
-
-        Walk(dir);
-
-        if (coll.onWall)
-        {
-            if (Input.GetKey(KeyCode.Z))
-            {
-                rb.velocity = new Vector2(rb.velocity.x, 0);
-            }
-            else if (!coll.onGround)
-            {
-                WallSlide();
-            }
-        }
-
-
-        if (Input.GetKeyDown(KeyCode.X))
-        {
-            Dash(xRaw, yRaw);
-        }
-
-        if (Input.GetKey(KeyCode.C))
-        {
-            if (coll.onGround)
-                Jump(Vector2.up, false);
-            if (coll.onWall && !coll.onGround)
-            {
-                WallJump();
-            }
-        }
-
-        if (wallJumped && (coll.onGround || coll.onWall))
-        {
-            wallJumped = false; // 상태 초기화
-            rb.velocity = new Vector2(rb.velocity.x, 0); // 수직 속도 초기화
+            case PlayerState.Idle:
+                IdleUpdate();
+                break;
+            case PlayerState.Walk:
+                WalkUpdate();
+                break;
+            case PlayerState.Jump:
+                JumpUpdate();
+                break;
+            case PlayerState.Fall:
+                FallUpdate();
+                break;
+            case PlayerState.Grab:
+                GrabUpdate();
+                break;
+            case PlayerState.Dash:
+                DashUpdate();
+                break;
         }
     }
 
-    private void Walk(Vector2 dir)
+    private void IdleUpdate()
     {
-        if (!canMove)
+        Move();
+
+        if (Input.GetAxisRaw("Horizontal") != 0)
         {
-            return;
+            curState = PlayerState.Walk;
         }
-        if (!wallJumped)
+        if (Input.GetKeyDown(KeyCode.C))
         {
-            rb.velocity = new Vector2(dir.x * speed, rb.velocity.y);
+            Jump();
+        }
+    }
+
+    private void WalkUpdate()
+    {
+        Move();
+
+        if (rb.velocity.sqrMagnitude < 0.01f)
+        {
+            curState = PlayerState.Idle;
+        }
+        if (Input.GetKeyDown(KeyCode.C))
+        {
+            Jump();
+        }
+        if (Input.GetKeyDown(KeyCode.X) && canDash)
+        {
+            Dash();
+        }
+    }
+
+    private void JumpUpdate()
+    {
+        Move();
+
+        if (coll.onGround && rb.velocity.y < 0.01f)
+        {
+            curState = PlayerState.Idle;
+            canDash = true;
+        }
+        else if (rb.velocity.y < -0.01f)
+        {
+            curState = PlayerState.Fall;  // 낙하 상태로 전환
+        }
+
+        if (Input.GetKeyDown(KeyCode.Z) && coll.onWall)
+        {
+            Grab();
+        }
+
+        if (Input.GetKeyDown(KeyCode.C) && coll.onWall)
+        {
+            GrabJump();
+        }
+        if (Input.GetKeyDown(KeyCode.X) && canDash)
+        {
+            Dash();
+        }
+    }
+
+    private void FallUpdate()
+    {
+        Move();
+
+        // 착지하면 Idle 상태로 전환
+        if (coll.onGround)
+        {
+            curState = PlayerState.Idle;
+            canDash = true;
+        }
+
+        if (Input.GetKeyDown(KeyCode.Z) && coll.onWall)
+        {
+            Grab();
+        }
+
+        if (Input.GetKeyDown(KeyCode.C) && coll.onWall)
+        {
+            GrabJump();
+        }
+        if (Input.GetKeyDown(KeyCode.X) && canDash)
+        {
+            Dash();
+        }
+    }
+
+    private void GrabUpdate()
+    {
+        GrabMove();
+
+        if (Input.GetKeyUp(KeyCode.Z))
+        {
+            UnGrab();
+        }
+        if (Input.GetKeyDown(KeyCode.C))
+        {
+            GrabJump();
+        }
+    }
+
+    private void DashUpdate()
+    {
+        if (Input.GetKeyDown(KeyCode.Z) && coll.onWall)
+        {
+            Grab();
+        }
+
+        if (dashTimeLeft > 0)
+        {
+            dashTimeLeft -= Time.deltaTime;
         }
         else
         {
-            rb.velocity = Vector2.Lerp(rb.velocity, (new Vector2(dir.x * speed, rb.velocity.y)), .5f * Time.deltaTime);
+            isDashing = false;
+            if (coll.onGround)
+            {
+                curState = PlayerState.Idle;    
+            }
+            curState = PlayerState.Fall;  // 대시 종료 후 낙하 상태로 전환
         }
     }
 
-    private void WallSlide()
+    private void Move()
     {
-        if (!canMove) return;
+        float xInput = Input.GetAxisRaw("Horizontal");
 
-        bool pushingWall = false;
-        if ((rb.velocity.x > 0 && coll.onRightWall) || (rb.velocity.x < 0 && coll.onLeftWall))
+        //float xSpeed = Mathf.Lerp(rb.velocity.x, xInput * maxSpeed, moveAccel);
+        float xSpeed = Mathf.MoveTowards(rb.velocity.x, xInput * maxSpeed, Time.deltaTime * moveAccel);
+        float ySpeed = Mathf.Max(rb.velocity.y, -maxFallSpeed);
+
+        rb.velocity = new Vector2(xSpeed, ySpeed);
+    }
+
+    private void Jump()
+    {
+        curState = PlayerState.Jump;
+        rb.velocity = new Vector2(rb.velocity.x, jumpSpeed);
+    }
+
+    private void Grab()
+    {
+        if (!coll.onWall)
+            return;
+
+        curState = PlayerState.Grab;
+        rb.velocity = Vector2.zero;
+        rb.gravityScale = 0f;
+    }
+
+    private void UnGrab()
+    {
+        curState = PlayerState.Jump;
+        rb.velocity = Vector2.zero;
+        rb.gravityScale = 1f;
+    }
+
+    private void GrabMove()
+    {
+        rb.velocity = Vector2.up * Input.GetAxisRaw("Vertical") * 3f;
+    }
+
+    private void GrabJump()
+    {
+        curState = PlayerState.Jump;
+        rb.gravityScale = 1f;
+        if (coll.onLeftWall)
         {
-            pushingWall = true;
+            rb.velocity = new Vector2(13f, 10f);
         }
-        float push = pushingWall ? 0 : rb.velocity.x;
-
-        // 수평 속도는 push, 수직 속도는 slideSpeed로 설정
-        rb.velocity = new Vector2(push, -slideSpeed);
-    }
-
-    private void Jump(Vector2 dir, bool wall)
-    {
-        rb.velocity = new Vector2(rb.velocity.x, 0);
-        rb.velocity += Vector2.up * jumpForce;
-    }
-
-
-    private void WallJump()
-    {
-        if ((side == 1 && coll.onRightWall) || side == -1 && !coll.onRightWall)
+        else if (coll.onRightWall)
         {
-            side *= -1;
+            rb.velocity = new Vector2(-13f, 10f);
+        }
+    }
+
+    private void Dash()
+    {
+        isDashing = true;
+        curState = PlayerState.Dash;
+        dashTimeLeft = dashTime;
+
+        float xInput = Input.GetAxisRaw("Horizontal");
+        float yInput = Input.GetAxisRaw("Vertical");
+
+        Vector2 dashDirection = new Vector2(xInput, yInput).normalized;
+        if (dashDirection == Vector2.zero)
+        {
+            dashDirection = new Vector2(transform.localScale.x, 0);  // 입력이 없으면 바라보는 방향으로 대시
         }
 
-        StopCoroutine(DisableMovement(0));
-        StartCoroutine(DisableMovement(.1f));
-
-        Vector2 wallDir = coll.onRightWall ? Vector2.left : Vector2.right;
-
-        Jump((Vector2.up / 1.5f + wallDir / 1.5f), true);
-
-        wallJumped = true;
-    }
-
-    private IEnumerator DisableMovement(float time)
-    {
-        canMove = false; // 이동 불가 설정
-        yield return new WaitForSeconds(time); // 지정한 시간 대기
-        canMove = true; // 이동 가능 설정
-    }
-
-    private void Dash(float x, float y)
-    {
-        if (!canMove) return;
-
-        StartCoroutine(PerformDash(x, y)); // 대시 수행 코루틴 호출
-    }
-
-    private IEnumerator PerformDash(float x, float y)
-    {
-        canMove = false; // 대시 중 이동 불가 설정
-        rb.velocity = Vector2.zero; // 대시 시 기존 속도 초기화
-
-        // 대시 방향과 속도 설정
-        Vector2 dashDirection = new Vector2(x, y).normalized; // 대시 방향 계산
-        float dashSpeed = 30f; // 대시 속도 설정
-
-        // 대시 속도 적용
         rb.velocity = dashDirection * dashSpeed;
-
-        // 대시 지속 시간
-        yield return new WaitForSeconds(0.2f);
-
-        canMove = true; // 대시 후 이동 가능 설정
+        canDash = false;
     }
 
     public void StopMovement()
     {
-        canMove = false;
+        // 플레이어의 속도를 0으로 설정하여 움직임을 멈춤
+        rb.velocity = Vector2.zero;
+
+        // 중력 스케일을 0으로 설정하여 중력 영향을 받지 않도록 함
+        rb.gravityScale = 0f;
+
+        // 플레이어의 현재 상태를 Idle로 전환하여 움직임 상태 초기화
+        curState = PlayerState.Idle;
     }
 }

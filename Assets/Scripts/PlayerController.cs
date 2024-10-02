@@ -13,11 +13,14 @@ public class PlayerController : MonoBehaviour
 
     [SerializeField] Collision coll;
 
-    [SerializeField] float slidespeed = 1.5f;
+    [SerializeField] float slideSpeed = 1.5f;
 
     private bool canMove = true;
     private bool wallGrab;
     private bool wallJumped;
+
+    public int side = 1;
+
 
     private void Awake()
     {
@@ -26,6 +29,12 @@ public class PlayerController : MonoBehaviour
 
     private void Update()
     {
+        if (!canMove)
+        {
+            rb.velocity = Vector2.zero; // 현재 속도를 0으로 설정
+            return;
+        }
+
         float x = Input.GetAxis("Horizontal");
         float y = Input.GetAxis("Vertical");
         float xRaw = Input.GetAxisRaw("Horizontal");
@@ -87,7 +96,17 @@ public class PlayerController : MonoBehaviour
 
     private void WallSlide()
     {
-        rb.velocity = new Vector2(rb.velocity.x, rb.velocity.y * slidespeed);
+        if (!canMove) return;
+
+        bool pushingWall = false;
+        if ((rb.velocity.x > 0 && coll.onRightWall) || (rb.velocity.x < 0 && coll.onLeftWall))
+        {
+            pushingWall = true;
+        }
+        float push = pushingWall ? 0 : rb.velocity.x;
+
+        // 수평 속도는 push, 수직 속도는 slideSpeed로 설정
+        rb.velocity = new Vector2(push, -slideSpeed);
     }
 
     private void Jump(Vector2 dir, bool wall)
@@ -99,9 +118,9 @@ public class PlayerController : MonoBehaviour
 
     private void WallJump()
     {
-        if ((coll.wallSide== 1 && coll.onRightWall) || coll.wallSide == -1 && !coll.onRightWall)
+        if ((side == 1 && coll.onRightWall) || side == -1 && !coll.onRightWall)
         {
-            coll.wallSide *= -1;
+            side *= -1;
         }
 
         StopCoroutine(DisableMovement(0));
@@ -144,5 +163,10 @@ public class PlayerController : MonoBehaviour
         yield return new WaitForSeconds(0.2f);
 
         canMove = true; // 대시 후 이동 가능 설정
+    }
+
+    public void StopMovement()
+    {
+        canMove = false;
     }
 }

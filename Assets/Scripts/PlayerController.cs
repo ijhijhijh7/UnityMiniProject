@@ -98,6 +98,10 @@ public class PlayerController : MonoBehaviour
         {
             curState = PlayerState.Idle;
         }
+        if (rb.velocity.y < -0.01f)
+        {
+            curState = PlayerState.Fall;
+        }
         if (Input.GetKeyDown(KeyCode.C))
         {
             Jump();
